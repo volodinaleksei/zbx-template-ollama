@@ -22,10 +22,10 @@ zabbix_export:
           triggers:
             - uuid: 6831ffd2e2ff401fb0ad04aaf51f48a3
               expression: 'last(/Ollama API/net.tcp.service[http,,{$OLLAMA_PORT}])=0'
-              name: 'TCP-порт Ollama закрыт. Проверьте сервис ollama на хосте.'
-              event_name: 'Ollama: порт {$OLLAMA_PORT} недоступен'
+              name: 'Ollama TCP port is closed. Check the ollama service on the host.'
+              event_name: 'Ollama: port {$OLLAMA_PORT} unreachable'
               priority: HIGH
-              description: 'Порт Ollama API ({$OLLAMA_PORT}) не отвечает. Проверьте контейнер ollama на 10.1.6.233.'
+              description: 'Ollama API port ({$OLLAMA_PORT}) not responding. Check the ollama service/container.'
         - uuid: 7b2f7237d8984fa39b4e812713ca3a2d
           name: 'Ollama: VRAM used by models'
           type: DEPENDENT
@@ -161,8 +161,8 @@ zabbix_export:
               trigger_prototypes:
                 - uuid: 4630e625ac1e453e864355f9a66393c2
                   expression: 'max(/Ollama API/ollama.model.inmem.flag[{#MODELID}],3h)>0 and last(/Ollama API/ollama.model.inmem.flag[{#MODELID}])=0'
-                  name: 'Модель была загружена в память Ollama за последние 3 ч, но сейчас выгружена. Если выгрузка неожидальная — проверьте сервис (keep_alive=-1 должен держать модель постоянно).'
-                  event_name: 'Ollama: модель {#MODELID} выгружена из памяти'
+                  name: 'Model was loaded into Ollama memory within the last 3h but is now unloaded. If unexpected, check the service (keep_alive=-1 keeps a model loaded permanently).'
+                  event_name: 'Ollama: model {#MODELID} unloaded from memory'
                   priority: WARNING
             - uuid: 94f6048e9c39466ca68fea90da7b9f3e
               name: 'Ollama: VRAM of {#MODELID}'
@@ -211,6 +211,6 @@ zabbix_export:
   triggers:
     - uuid: bf65960f08fd420dbe3240f8dfcccdf7
       expression: 'last(/Ollama API/ollama.models.count)=0 and last(/Ollama API/net.tcp.service[http,,{$OLLAMA_PORT}])=1'
-      name: 'Порт 11434 жив, но /v1/models вернул пустой список — models directory пуст или Ollama повреждён.'
-      event_name: 'Ollama: API отвечает, но список моделей пуст'
+      name: 'Port 11434 is alive but /v1/models returned an empty list — models directory empty or Ollama broken.'
+      event_name: 'Ollama: API responds but model list is empty'
       priority: AVERAGE

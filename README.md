@@ -1,42 +1,42 @@
-# Zabbix шаблон: Ollama API
+# Zabbix template: Ollama API
 
-Мониторинг [Ollama](https://ollama.com) через Zabbix 7.x: два HTTP raw-ITEM'а + dependent-считалки.
+Monitoring for [Ollama](https://ollama.com) on Zabbix 7.x: two HTTP raw items + dependent counters.
 
-## Эндпоинты
+## Endpoints
 
-| Master | Эндпоинт | Что даёт |
+| Master item | Endpoint | Provides |
 |---|---|---|
-| `ollama.models.available` | `/v1/models` (5m) | список **установленных** моделей |
-| `ollama.ps.raw` | `/api/ps` (1m) | **загруженные** модели: name, size, size_vram, expires_at |
+| `ollama.models.available` | `/v1/models` (5m) | list of **installed** models |
+| `ollama.ps.raw` | `/api/ps` (1m) | **loaded** models: name, size, size_vram, expires_at |
 
-## ITEM'ы
+## Items
 
-- `ollama.models.count` / `ollama.models.list` — установлено (число / список через запятую)
-- `ollama.models.loaded.count` / `ollama.models.loaded.list` — в памяти
-- `ollama.loaded.vram` — сумма `size_vram` загруженных моделей, байт
-- `net.tcp.service[http,,{$OLLAMA_PORT}]` — simple check порта
+- `ollama.models.count` / `ollama.models.list` — installed (count / comma-separated list)
+- `ollama.models.loaded.count` / `ollama.models.loaded.list` — loaded into memory
+- `ollama.loaded.vram` — sum of `size_vram` across loaded models, bytes
+- `net.tcp.service[http,,{$OLLAMA_PORT}]` — simple port check
 
 ## LLD
 
-Правило `ollama.models.discovery` (по `/api/ps`) создаёт на каждую модель:
-`ollama.model.vram[{#MODELID}]`, `ollama.model.ctx[{#MODELID}]`, флаг `inmem`.
-Триггер-прототип: «Ollama: модель {#MODELID} выгружена из памяти» (была в памяти <3h, сейчас нет).
+`ollama.models.discovery` (from `/api/ps`) creates per model:
+`ollama.model.vram[{#MODELID}]`, `ollama.model.ctx[{#MODELID}]`, and an in-memory flag.
+Trigger prototype: "Ollama: model {#MODELID} unloaded from memory" (was loaded <3h ago, gone now).
 
-## Триггеры
+## Triggers
 
-| Событие | Sev | Условие |
+| Event | Severity | Condition |
 |---|---|---|
-| Ollama: порт {$OLLAMA_PORT} недоступен | High | TCP-порт закрыт |
-| Ollama: API отвечает, но список моделей пуст | Warning | порт живой, `/v1/models` пуст |
+| Ollama: port {$OLLAMA_PORT} unreachable | High | TCP port closed |
+| Ollama: API responds but model list is empty | Warning | port alive, `/v1/models` empty |
 
-## Макросы
+## Macros
 
-| Макрос | По умолчанию |
+| Macro | Default |
 |---|---|
 | `{$OLLAMA_PORT}` | `11434` |
 
-## Установка
+## Setup
 
 1. Import `template_ollama.yaml`.
-2. Хост с Agent-interface (нужен только как `{HOST.CONN}`), IP хоста Ollama.
-3. Привязать шаблон.
+2. Host with an Agent interface (used only as `{HOST.CONN}`) pointing at the Ollama host.
+3. Link the template.
