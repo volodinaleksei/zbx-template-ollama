@@ -1,0 +1,216 @@
+zabbix_export:
+  version: '7.4'
+  template_groups:
+    - uuid: a571c0d144b14fd4a87a9d9b2aa9fcd6
+      name: Templates/Applications
+  templates:
+    - uuid: 5d6975b9064841c08ca59de9660f5470
+      template: 'Ollama API'
+      name: 'Ollama API'
+      description: 'Ollama API monitoring (raw /v1/models + /api/ps).'
+      groups:
+        - name: Templates/Applications
+      items:
+        - uuid: 9827d86b7967449d9e9622719422e695
+          name: 'Ollama: API port'
+          type: SIMPLE
+          key: 'net.tcp.service[http,,{$OLLAMA_PORT}]'
+          history: 90d
+          description: 'Checks if the Ollama API port is responsive.'
+          valuemap:
+            name: 'Service state'
+          triggers:
+            - uuid: 6831ffd2e2ff401fb0ad04aaf51f48a3
+              expression: 'last(/Ollama API/net.tcp.service[http,,{$OLLAMA_PORT}])=0'
+              name: 'TCP-порт Ollama закрыт. Проверьте сервис ollama на хосте.'
+              event_name: 'Ollama: порт {$OLLAMA_PORT} недоступен'
+              priority: HIGH
+              description: 'Порт Ollama API ({$OLLAMA_PORT}) не отвечает. Проверьте контейнер ollama на 10.1.6.233.'
+        - uuid: 7b2f7237d8984fa39b4e812713ca3a2d
+          name: 'Ollama: VRAM used by models'
+          type: DEPENDENT
+          key: ollama.loaded.vram
+          history: 90d
+          units: B
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.models[*].size_vram'
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var a = JSON.parse(value);
+                  return a.reduce(function(s,x){return s+x;},0);
+          master_item:
+            key: ollama.ps.raw
+        - uuid: d98a33a456c04e0e8c743a0f3481d23c
+          name: 'Ollama: models raw'
+          type: HTTP_AGENT
+          key: ollama.models.available
+          delay: 5m
+          history: '0'
+          value_type: TEXT
+          description: 'Fetches raw data of available models from LM Studio API.'
+          url: 'http://{HOST.CONN}:{$OLLAMA_PORT}/v1/models'
+        - uuid: 2f5f4f9a25114e8d933d5002b2e83b68
+          name: 'Ollama: models total'
+          type: DEPENDENT
+          key: ollama.models.count
+          history: 90d
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.data.length()
+          master_item:
+            key: ollama.models.available
+        - uuid: cf07a867b7be4356a58c7dea756ac475
+          name: 'Ollama: model list'
+          type: DEPENDENT
+          key: ollama.models.list
+          history: 90d
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.data[*].id'
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var a = JSON.parse(value);
+                  return a.join(", ");
+          master_item:
+            key: ollama.models.available
+        - uuid: 53f26b2fe8564b9f980ae1fbd21f2af4
+          name: 'Ollama: models loaded'
+          type: DEPENDENT
+          key: ollama.models.loaded.count
+          history: 90d
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.models.length()
+          master_item:
+            key: ollama.ps.raw
+        - uuid: 76d70ee0ebb443bfa8ec1737be24f2b4
+          name: 'Ollama: loaded model list'
+          type: DEPENDENT
+          key: ollama.models.loaded.list
+          history: 90d
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$.models[*].name'
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var a = JSON.parse(value);
+                  return a.join(", ");
+          master_item:
+            key: ollama.ps.raw
+        - uuid: 6562554fc8a3476e91ab0b3acdabe122
+          name: 'Ollama: loaded models raw (api/ps)'
+          type: HTTP_AGENT
+          key: ollama.ps.raw
+          history: '0'
+          value_type: TEXT
+          description: 'Raw /api/ps snapshot of models currently loaded in VRAM.'
+          timeout: 15s
+          url: 'http://{HOST.CONN}:{$OLLAMA_PORT}/api/ps'
+      discovery_rules:
+        - uuid: f6a7fbb7987040b68e134dad31a8512d
+          name: 'Ollama: models'
+          type: DEPENDENT
+          key: ollama.models.discovery
+          lifetime: 1h
+          item_prototypes:
+            - uuid: ba577de6c6f0449cbec76cbeb0051750
+              name: 'Ollama: context length of {#MODELID}'
+              type: DEPENDENT
+              key: 'ollama.model.ctx[{#MODELID}]'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.models[?(@.name == "{#MODELID}")].context_length'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '[]'
+                - type: JAVASCRIPT
+                  parameters:
+                    - |
+                      var a = JSON.parse(value);
+                      return a.length ? a[0] : 0;
+              master_item:
+                key: ollama.ps.raw
+            - uuid: b49c9976f9d74d84ad6ff8d406ba0eab
+              name: 'Ollama: loaded in memory flag of {#MODELID}'
+              type: DEPENDENT
+              key: 'ollama.model.inmem.flag[{#MODELID}]'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.models[?(@.name == "{#MODELID}")].name'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '[]'
+                - type: JAVASCRIPT
+                  parameters:
+                    - |
+                      var a = JSON.parse(value);
+                      return (a.length > 0) ? 1 : 0;
+              master_item:
+                key: ollama.ps.raw
+              trigger_prototypes:
+                - uuid: 4630e625ac1e453e864355f9a66393c2
+                  expression: 'max(/Ollama API/ollama.model.inmem.flag[{#MODELID}],3h)>0 and last(/Ollama API/ollama.model.inmem.flag[{#MODELID}])=0'
+                  name: 'Модель была загружена в память Ollama за последние 3 ч, но сейчас выгружена. Если выгрузка неожидальная — проверьте сервис (keep_alive=-1 должен держать модель постоянно).'
+                  event_name: 'Ollama: модель {#MODELID} выгружена из памяти'
+                  priority: WARNING
+            - uuid: 94f6048e9c39466ca68fea90da7b9f3e
+              name: 'Ollama: VRAM of {#MODELID}'
+              type: DEPENDENT
+              key: 'ollama.model.vram[{#MODELID}]'
+              units: B
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.models[?(@.name == "{#MODELID}")].size_vram'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '[]'
+                - type: JAVASCRIPT
+                  parameters:
+                    - |
+                      var a = JSON.parse(value);
+                      return a.length ? a[0] : 0;
+              master_item:
+                key: ollama.ps.raw
+          master_item:
+            key: ollama.models.available
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var d = JSON.parse(value).data;
+                  var out = [];
+                  for (var i = 0; i < d.length; i++) {
+                    out.push({
+                      "{#MODELID}": d[i].id
+                    });
+                  }
+                  return JSON.stringify(out);
+      macros:
+        - macro: '{$OLLAMA_PORT}'
+          value: '11434'
+          description: 'Ollama API port'
+      valuemaps:
+        - uuid: 4ea6e9361356466e98b25db0577ceccb
+          name: 'Service state'
+          mappings:
+            - value: '0'
+              newvalue: Down
+            - value: '1'
+              newvalue: Up
+  triggers:
+    - uuid: bf65960f08fd420dbe3240f8dfcccdf7
+      expression: 'last(/Ollama API/ollama.models.count)=0 and last(/Ollama API/net.tcp.service[http,,{$OLLAMA_PORT}])=1'
+      name: 'Порт 11434 жив, но /v1/models вернул пустой список — models directory пуст или Ollama повреждён.'
+      event_name: 'Ollama: API отвечает, но список моделей пуст'
+      priority: AVERAGE
